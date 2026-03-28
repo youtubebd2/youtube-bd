@@ -747,7 +747,6 @@ canvas{width:100%!important;border-radius:var(--radius);}
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, orderBy, onSnapshot, serverTimestamp, getDoc, setDoc, increment } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
 
 const firebaseConfig = {
   apiKey: "AIzaSyDBY_hDp0igCdWO6s_QelXBZG34aEZtacs",
@@ -761,7 +760,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
-const storage = getStorage(app);
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: 'select_account' });
 
@@ -1008,9 +1006,24 @@ window.playVideo = async (id) => {
   navigate('player');
   document.getElementById('player-page').classList.add('active');
   const container = document.getElementById('video-container');
-  container.innerHTML = v.embedUrl
-    ? `<iframe src="${v.embedUrl}?autoplay=1&enablejsapi=1" allowfullscreen allow="autoplay" style="width:100%;height:100%;border:none;display:block;"></iframe>`
-    : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#fff;flex-direction:column;gap:12px;"><div style="font-size:3rem;">🎬</div><div>No video URL</div></div>`;
+  // Check if local IndexedDB video
+  if(v.isLocal && v.videoId) {
+    container.innerHTML = '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#fff;flex-direction:column;gap:10px;background:#111;"><div style="font-size:2rem;">⏳</div><div style="font-size:0.875rem;">ভিডিও লোড হচ্ছে...</div></div>';
+    getVideoFromDB(v.videoId).then(blob => {
+      if(blob) {
+        const blobUrl = URL.createObjectURL(blob);
+        container.innerHTML = `<video src="${blobUrl}" controls autoplay playsinline style="width:100%;height:100%;display:block;background:#000;"></video>`;
+      } else {
+        container.innerHTML = '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#fff;flex-direction:column;gap:10px;background:#111;"><div style="font-size:2.5rem;">📱</div><div style="font-size:0.875rem;text-align:center;padding:0 20px;">ভিডিওটি শুধু এই ডিভাইসে দেখা যাবে</div></div>';
+      }
+    });
+  } else if(v.embedUrl) {
+    container.innerHTML = `<iframe src="${v.embedUrl}?autoplay=1&enablejsapi=1" allowfullscreen allow="autoplay" style="width:100%;height:100%;border:none;display:block;"></iframe>`;
+  } else if(v.videoUrl) {
+    container.innerHTML = `<video src="${v.videoUrl}" controls autoplay playsinline style="width:100%;height:100%;display:block;background:#000;"></video>`;
+  } else {
+    container.innerHTML = '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#fff;flex-direction:column;gap:12px;"><div style="font-size:3rem;">🎬</div><div>No video</div></div>';
+  }
   const liked = JSON.parse(localStorage.getItem('yt_likes')||'[]').includes(id);
   const inWL = watchLater.find(x=>x.id===id);
   document.getElementById('video-details').innerHTML = `
@@ -1135,112 +1148,132 @@ window.handleThumbSelect = (input) => {
   showToast('✅ Thumbnail সিলেক্ট হয়েছে!');
 };
 
-function uploadFileToStorage(file, path, onProgress) {
-  return new Promise((resolve, reject) => {
-    const storageRef = ref(storage, path);
-    const task = uploadBytesResumable(storageRef, file);
-    task.on('state_changed',
-      snap => { const pct = Math.round(snap.bytesTransferred / snap.totalBytes * 100); onProgress(pct); },
-      reject,
-      async () => { resolve(await getDownloadURL(task.snapshot.ref)); }
-    );
+// image → base64 thumbnail compress
+function imageToBase64(file, maxW=480) {
+  return new Promise(resolve => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const ratio = Math.min(maxW/img.width, 270/img.height, 1);
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width*ratio; canvas.height = img.height*ratio;
+      canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL('image/jpeg',0.75));
+    };
+    img.src = url;
+  });
+}
+
+// IndexedDB — ভিডিও device এ save করবে
+function openVideoDB() {
+  return new Promise((resolve,reject)=>{
+    const req = indexedDB.open('TubeBD_Videos',1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore('videos',{keyPath:'id'});
+    req.onsuccess = e => resolve(e.target.result);
+    req.onerror = reject;
+  });
+}
+async function saveVideoToDB(id, blob) {
+  const db2 = await openVideoDB();
+  return new Promise((resolve,reject)=>{
+    const tx = db2.transaction('videos','readwrite');
+    tx.objectStore('videos').put({id,blob});
+    tx.oncomplete = resolve; tx.onerror = reject;
+  });
+}
+async function getVideoFromDB(id) {
+  const db2 = await openVideoDB();
+  return new Promise(resolve=>{
+    const tx = db2.transaction('videos','readonly');
+    const req = tx.objectStore('videos').get(id);
+    req.onsuccess = e => resolve(e.target.result?.blob||null);
+    req.onerror = ()=>resolve(null);
   });
 }
 
 window.uploadVideo = async () => {
   const title = document.getElementById('upload-title').value.trim();
-  if(!title){ showToast('❌ ভিডিওর নাম লিখুন'); return; }
-  if(!currentUser){ openSignInModal(); return; }
-  if(!selectedVideoFile){ showToast('❌ প্রথমে ভিডিও সিলেক্ট করুন'); return; }
+  if(!title){showToast('❌ ভিডিওর নাম লিখুন');return;}
+  if(!currentUser){openSignInModal();return;}
+  if(!selectedVideoFile){showToast('❌ প্রথমে ভিডিও সিলেক্ট করুন');return;}
 
-  const statusBox = document.getElementById('upload-status-box');
-  const fill = document.getElementById('upload-progress');
-  const statusText = document.getElementById('upload-status-text');
-  const percentEl = document.getElementById('upload-percent');
-  const subStatus = document.getElementById('upload-substatus');
-  const publishBtn = document.getElementById('publish-btn');
-
-  statusBox.style.display = 'block';
-  publishBtn.disabled = true;
-  publishBtn.style.opacity = '0.6';
+  const statusBox=document.getElementById('upload-status-box');
+  const fill=document.getElementById('upload-progress');
+  const statusText=document.getElementById('upload-status-text');
+  const percentEl=document.getElementById('upload-percent');
+  const subStatus=document.getElementById('upload-substatus');
+  const publishBtn=document.getElementById('publish-btn');
+  statusBox.style.display='block';
+  publishBtn.disabled=true; publishBtn.style.opacity='0.6';
 
   try {
-    // Step 1: Upload Video
-    statusText.textContent = '📤 ভিডিও আপলোড হচ্ছে...';
-    subStatus.textContent = 'এটা কিছুটা সময় নিতে পারে...';
-    const uid = currentUser.uid;
-    const ts = Date.now();
-    const videoPath = `videos/${uid}/${ts}_${selectedVideoFile.name}`;
-    const videoUrl = await uploadFileToStorage(selectedVideoFile, videoPath, (pct) => {
-      fill.style.width = (pct * 0.7) + '%';
-      percentEl.textContent = Math.round(pct * 0.7) + '%';
-    });
+    const ts=Date.now();
+    const videoId=`vid_${currentUser.uid}_${ts}`;
 
-    // Step 2: Upload Thumbnail
-    let thumbUrl = `https://picsum.photos/seed/${ts}/480/270`;
-    if(selectedThumbFile) {
-      statusText.textContent = '🖼️ Thumbnail আপলোড হচ্ছে...';
-      const thumbPath = `thumbnails/${uid}/${ts}_${selectedThumbFile.name}`;
-      thumbUrl = await uploadFileToStorage(selectedThumbFile, thumbPath, (pct) => {
-        fill.style.width = (70 + pct * 0.2) + '%';
-        percentEl.textContent = Math.round(70 + pct * 0.2) + '%';
-      });
-    }
+    // Step 1: Save video locally in IndexedDB
+    statusText.textContent='💾 ভিডিও সেভ হচ্ছে...';
+    subStatus.textContent='ডিভাইসে সেভ করা হচ্ছে...';
+    fill.style.width='10%'; percentEl.textContent='10%';
+    await saveVideoToDB(videoId, selectedVideoFile);
+    fill.style.width='55%'; percentEl.textContent='55%';
 
-    // Step 3: Save to Firestore
-    statusText.textContent = '💾 তথ্য সংরক্ষণ হচ্ছে...';
-    subStatus.textContent = 'প্রায় হয়ে গেছে...';
-    fill.style.width = '95%';
-    percentEl.textContent = '95%';
-    const vid = document.getElementById('preview-video');
-    await addDoc(collection(db,'videos'), {
+    // Step 2: Thumbnail — base64 compressed → Firestore
+    statusText.textContent='🖼️ Thumbnail প্রসেস হচ্ছে...';
+    subStatus.textContent='ছবি compress হচ্ছে...';
+    let thumbData=`https://picsum.photos/seed/${ts}/480/270`;
+    if(selectedThumbFile){ thumbData=await imageToBase64(selectedThumbFile,480); }
+    fill.style.width='80%'; percentEl.textContent='80%';
+
+    // Step 3: Save metadata to Firestore
+    statusText.textContent='☁️ তথ্য সংরক্ষণ হচ্ছে...';
+    subStatus.textContent='প্রায় হয়ে গেছে...';
+    const vid=document.getElementById('preview-video');
+    const docRef=await addDoc(collection(db,'videos'),{
       title,
-      description: document.getElementById('upload-desc').value,
-      category: document.getElementById('upload-category').value,
-      tags: document.getElementById('upload-tags').value.split(',').map(t=>t.trim()).filter(Boolean),
-      videoUrl,
-      thumbnail: thumbUrl,
-      channel: userProfile.name || currentUser.displayName || 'My Channel',
-      channelId: currentUser.uid,
-      views: 0, likes: 0,
-      duration: vid._duration || '0:00',
-      subscribers: userProfile.subscribers || 0,
-      uploadedAt: new Date().toISOString()
+      description:document.getElementById('upload-desc').value,
+      category:document.getElementById('upload-category').value,
+      tags:document.getElementById('upload-tags').value.split(',').map(t=>t.trim()).filter(Boolean),
+      videoId, videoUrl:'',
+      thumbnail:thumbData,
+      channel:userProfile.name||currentUser.displayName||'My Channel',
+      channelId:currentUser.uid,
+      views:0, likes:0,
+      duration:vid._duration||'0:00',
+      subscribers:userProfile.subscribers||0,
+      uploadedAt:new Date().toISOString(),
+      isLocal:true
     });
 
-    fill.style.width = '100%';
-    percentEl.textContent = '100%';
-    statusText.textContent = '✅ Published!';
-    subStatus.textContent = 'ভিডিও সফলভাবে আপলোড হয়েছে!';
+    fill.style.width='100%'; percentEl.textContent='100%';
+    statusText.textContent='✅ Published!';
+    subStatus.textContent='ভিডিও সফলভাবে Publish হয়েছে! 🎉';
     showToast('✅ ভিডিও Publish হয়েছে!');
 
-    // Reset form
-    setTimeout(() => {
-      statusBox.style.display = 'none';
-      fill.style.width = '0';
-      publishBtn.disabled = false;
-      publishBtn.style.opacity = '1';
-      selectedVideoFile = null;
-      selectedThumbFile = null;
-      ['upload-title','upload-desc','upload-tags'].forEach(id => document.getElementById(id).value = '');
-      document.getElementById('upload-preview').style.display = 'none';
-      document.getElementById('thumb-pick-content').innerHTML = '<div style="font-size:1.8rem;margin-bottom:6px;">🖼️</div><div style="font-size:0.85rem;color:var(--text-muted);">Thumbnail বেছে নিন</div>';
-      document.getElementById('upload-area').innerHTML = '<div class="upload-icon">🎬</div><div style="font-size:1rem;font-weight:600;margin-bottom:6px;">গ্যালারি থেকে ভিডিও বেছে নিন</div><div style="font-size:0.85rem;color:var(--text-muted);">MP4, MOV, WebM · ট্যাপ করুন</div><input type="file" id="file-input" accept="video/*" style="display:none" onchange="handleFileSelect(this)">';
-    }, 2000);
+    // Add to local list
+    const newVid={id:docRef.id,title,thumbnail:thumbData,channel:userProfile.name||currentUser.displayName||'My Channel',channelId:currentUser.uid,views:0,likes:0,duration:vid._duration||'0:00',category:document.getElementById('upload-category').value,videoId,isLocal:true,uploadedAt:new Date().toISOString()};
+    allVideos=[newVid,...allVideos];
 
-    // Reload videos
-    const snap = await getDocs(collection(db,'videos'));
-    allVideos = [...DEMO_VIDEOS, ...snap.docs.map(d=>({id:d.id,...d.data()}))];
+    setTimeout(()=>{
+      statusBox.style.display='none'; fill.style.width='0';
+      publishBtn.disabled=false; publishBtn.style.opacity='1';
+      selectedVideoFile=null; selectedThumbFile=null;
+      ['upload-title','upload-desc','upload-tags'].forEach(id=>document.getElementById(id).value='');
+      document.getElementById('upload-preview').style.display='none';
+      document.getElementById('thumb-pick-content').innerHTML='<div style="font-size:1.8rem;margin-bottom:6px;">🖼️</div><div style="font-size:0.85rem;color:var(--text-muted);">Thumbnail বেছে নিন</div>';
+      document.getElementById('upload-area').innerHTML='<div class="upload-icon">🎬</div><div style="font-size:1rem;font-weight:600;margin-bottom:6px;">গ্যালারি থেকে ভিডিও বেছে নিন</div><div style="font-size:0.85rem;color:var(--text-muted);">MP4, MOV, WebM · ট্যাপ করুন</div><input type="file" id="file-input" accept="video/*" style="display:none" onchange="handleFileSelect(this)">';
+      navigate('home');
+    },2000);
 
-  } catch(e) {
-    statusText.textContent = '❌ Error!';
-    subStatus.textContent = e.message;
-    percentEl.textContent = '';
-    publishBtn.disabled = false;
-    publishBtn.style.opacity = '1';
-    showToast('❌ ' + e.message);
+  } catch(e){
+    statusText.textContent='❌ Error!';
+    subStatus.textContent=e.message;
+    percentEl.textContent='';
+    publishBtn.disabled=false; publishBtn.style.opacity='1';
+    showToast('❌ '+e.message);
   }
 };
+
 window.saveDraft = () => {localStorage.setItem('yt_draft',JSON.stringify({title:document.getElementById('upload-title').value,description:document.getElementById('upload-desc').value,url:document.getElementById('upload-url').value}));showToast('📝 Draft saved!');};
 
 async function loadTrending(){
