@@ -526,25 +526,59 @@ canvas{width:100%!important;border-radius:var(--radius);}
   <div class="page" id="upload-page">
     <div class="page-title">📤 Upload Video</div>
     <div style="max-width:640px;margin:0 auto;">
+
+      <!-- Video Pick from Gallery -->
       <div class="upload-area" id="upload-area" onclick="document.getElementById('file-input').click()">
         <div class="upload-icon">🎬</div>
-        <div style="font-size:1rem;font-weight:600;margin-bottom:6px;">Drag & drop or click to browse</div>
-        <div style="font-size:0.85rem;color:var(--text-muted);">MP4, WebM, MOV — Max 2GB</div>
+        <div style="font-size:1rem;font-weight:600;margin-bottom:6px;">গ্যালারি থেকে ভিডিও বেছে নিন</div>
+        <div style="font-size:0.85rem;color:var(--text-muted);">MP4, MOV, WebM · ট্যাপ করুন</div>
         <input type="file" id="file-input" accept="video/*" style="display:none" onchange="handleFileSelect(this)">
       </div>
       <div id="upload-preview" style="display:none;margin-bottom:14px;">
-        <video id="preview-video" controls style="width:100%;border-radius:var(--radius);background:#000;"></video>
+        <video id="preview-video" controls playsinline style="width:100%;border-radius:var(--radius);background:#000;max-height:260px;"></video>
+        <div id="video-file-info" style="font-size:0.76rem;color:var(--text-muted);margin-top:5px;padding:0 2px;"></div>
       </div>
-      <div class="form-group"><label class="form-label">Video Title *</label><input class="form-input" id="upload-title" placeholder="Enter video title..."></div>
-      <div class="form-group"><label class="form-label">Description</label><textarea class="form-textarea" id="upload-desc" placeholder="Describe your video..."></textarea></div>
-      <div class="form-group"><label class="form-label">Category</label><select class="form-select" id="upload-category"><option>Music</option><option>Gaming</option><option>Tech</option><option>News</option><option>Education</option><option>Comedy</option><option>Sports</option><option>Travel</option><option>Food</option><option>Lifestyle</option></select></div>
-      <div class="form-group"><label class="form-label">Tags (comma separated)</label><input class="form-input" id="upload-tags" placeholder="e.g. bangladesh, music, viral"></div>
-      <div class="form-group"><label class="form-label">YouTube Embed URL</label><input class="form-input" id="upload-url" placeholder="https://www.youtube.com/embed/..."></div>
-      <div class="form-group"><label class="form-label">Thumbnail URL</label><input class="form-input" id="upload-thumb" placeholder="https://..." oninput="previewThumb(this.value)"><img id="thumb-preview" style="margin-top:8px;width:180px;border-radius:8px;display:none;" alt="Thumbnail"></div>
-      <div class="progress-wrap" id="upload-progress-wrap" style="display:none;"><div class="progress-fill" id="upload-progress"></div></div>
-      <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap;">
-        <button class="btn-primary" onclick="uploadVideo()">🚀 Publish</button>
-        <button class="btn-secondary" onclick="saveDraft()">📝 Save Draft</button>
+
+      <!-- Thumbnail Pick from Gallery -->
+      <div class="form-group">
+        <label class="form-label">📸 Thumbnail — গ্যালারি থেকে বেছে নিন</label>
+        <div id="thumb-pick-area" onclick="document.getElementById('thumb-file-input').click()"
+          style="border:2px dashed var(--border);border-radius:var(--radius-sm);padding:20px;text-align:center;cursor:pointer;transition:border-color 0.2s,background 0.2s;background:var(--bg-secondary);"
+          onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+          <div id="thumb-pick-content">
+            <div style="font-size:1.8rem;margin-bottom:6px;">🖼️</div>
+            <div style="font-size:0.85rem;color:var(--text-muted);">Thumbnail বেছে নিন (JPG/PNG)</div>
+          </div>
+          <input type="file" id="thumb-file-input" accept="image/*" style="display:none" onchange="handleThumbSelect(this)">
+        </div>
+      </div>
+
+      <div class="form-group"><label class="form-label">Video Title *</label><input class="form-input" id="upload-title" placeholder="ভিডিওর নাম লিখুন..."></div>
+      <div class="form-group"><label class="form-label">Description</label><textarea class="form-textarea" id="upload-desc" placeholder="ভিডিও সম্পর্কে লিখুন..."></textarea></div>
+      <div class="form-group"><label class="form-label">Category</label>
+        <select class="form-select" id="upload-category">
+          <option>Music</option><option>Gaming</option><option>Tech</option><option>News</option>
+          <option>Education</option><option>Comedy</option><option>Sports</option><option>Travel</option>
+          <option>Food</option><option>Lifestyle</option><option>Bangladesh</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Tags (comma separated)</label>
+        <input class="form-input" id="upload-tags" placeholder="যেমন: bangladesh, music, viral">
+      </div>
+
+      <!-- Upload Progress Box -->
+      <div id="upload-status-box" style="display:none;background:var(--bg-secondary);border-radius:var(--radius-sm);padding:14px;margin:12px 0;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <span id="upload-status-text" style="font-size:0.875rem;font-weight:600;">আপলোড হচ্ছে...</span>
+          <span id="upload-percent" style="font-size:0.875rem;color:var(--accent);font-weight:700;">0%</span>
+        </div>
+        <div class="progress-wrap" style="margin:0;"><div class="progress-fill" id="upload-progress"></div></div>
+        <div id="upload-substatus" style="font-size:0.75rem;color:var(--text-muted);margin-top:6px;">অনুগ্রহ করে অপেক্ষা করুন...</div>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;">
+        <button class="btn-primary" onclick="uploadVideo()" id="publish-btn">🚀 Publish</button>
+        <button class="btn-secondary" onclick="saveDraft()">📝 Draft</button>
       </div>
     </div>
   </div>
@@ -713,6 +747,7 @@ canvas{width:100%!important;border-radius:var(--radius);}
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, orderBy, onSnapshot, serverTimestamp, getDoc, setDoc, increment } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
 
 const firebaseConfig = {
   apiKey: "AIzaSyDBY_hDp0igCdWO6s_QelXBZG34aEZtacs",
@@ -726,6 +761,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
+const storage = getStorage(app);
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: 'select_account' });
 
@@ -1068,40 +1104,142 @@ window.closeMiniPlayer = () => {document.getElementById('mini-player').classList
 window.expandPlayer = () => {if(currentVideo)navigate('player');};
 window.toggleFullscreen = () => {const wrap=document.getElementById('player-wrap');if(!document.fullscreenElement)wrap.requestFullscreen?.();else document.exitFullscreen?.();};
 
+let selectedVideoFile = null;
+let selectedThumbFile = null;
+
 window.handleFileSelect = (input) => {
-  const file=input.files[0];if(!file)return;
-  document.getElementById('preview-video').src=URL.createObjectURL(file);
-  document.getElementById('upload-preview').style.display='block';
-  showToast('✅ Video selected: '+file.name);
+  const file = input.files[0]; if(!file) return;
+  selectedVideoFile = file;
+  const url = URL.createObjectURL(file);
+  const vid = document.getElementById('preview-video');
+  vid.src = url;
+  document.getElementById('upload-preview').style.display = 'block';
+  const sizeMB = (file.size / 1024 / 1024).toFixed(1);
+  document.getElementById('video-file-info').textContent = `📁 ${file.name} · ${sizeMB} MB`;
+  // Auto-generate duration
+  vid.onloadedmetadata = () => {
+    const d = Math.round(vid.duration);
+    const m = Math.floor(d/60), s = d%60;
+    vid._duration = `${m}:${s.toString().padStart(2,'0')}`;
+  };
+  // Update upload area
+  document.getElementById('upload-area').innerHTML = `<div style="font-size:2rem;margin-bottom:8px;">✅</div><div style="font-weight:600;color:#2ecc71;margin-bottom:4px;">ভিডিও সিলেক্ট হয়েছে!</div><div style="font-size:0.78rem;color:var(--text-muted)">${file.name}</div><input type="file" id="file-input" accept="video/*" style="display:none" onchange="handleFileSelect(this)">`;
+  showToast('✅ ভিডিও সিলেক্ট হয়েছে!');
 };
-window.previewThumb = (url) => {const img=document.getElementById('thumb-preview');if(url){img.src=url;img.style.display='block';}else img.style.display='none';};
+
+window.handleThumbSelect = (input) => {
+  const file = input.files[0]; if(!file) return;
+  selectedThumbFile = file;
+  const url = URL.createObjectURL(file);
+  document.getElementById('thumb-pick-content').innerHTML = `<img src="${url}" style="width:100%;max-height:120px;object-fit:cover;border-radius:8px;" alt="Thumbnail"><div style="font-size:0.75rem;color:#2ecc71;margin-top:6px;">✅ Thumbnail সিলেক্ট হয়েছে!</div>`;
+  showToast('✅ Thumbnail সিলেক্ট হয়েছে!');
+};
+
+function uploadFileToStorage(file, path, onProgress) {
+  return new Promise((resolve, reject) => {
+    const storageRef = ref(storage, path);
+    const task = uploadBytesResumable(storageRef, file);
+    task.on('state_changed',
+      snap => { const pct = Math.round(snap.bytesTransferred / snap.totalBytes * 100); onProgress(pct); },
+      reject,
+      async () => { resolve(await getDownloadURL(task.snapshot.ref)); }
+    );
+  });
+}
 
 window.uploadVideo = async () => {
   const title = document.getElementById('upload-title').value.trim();
-  if(!title){showToast('❌ Please enter a title');return;}
-  if(!currentUser){openSignInModal();return;}
-  const wrap=document.getElementById('upload-progress-wrap');const fill=document.getElementById('upload-progress');
-  wrap.style.display='block';let progress=0;
-  const iv=setInterval(()=>{progress+=Math.random()*15;fill.style.width=Math.min(progress,95)+'%';},200);
+  if(!title){ showToast('❌ ভিডিওর নাম লিখুন'); return; }
+  if(!currentUser){ openSignInModal(); return; }
+  if(!selectedVideoFile){ showToast('❌ প্রথমে ভিডিও সিলেক্ট করুন'); return; }
+
+  const statusBox = document.getElementById('upload-status-box');
+  const fill = document.getElementById('upload-progress');
+  const statusText = document.getElementById('upload-status-text');
+  const percentEl = document.getElementById('upload-percent');
+  const subStatus = document.getElementById('upload-substatus');
+  const publishBtn = document.getElementById('publish-btn');
+
+  statusBox.style.display = 'block';
+  publishBtn.disabled = true;
+  publishBtn.style.opacity = '0.6';
+
   try {
-    await addDoc(collection(db,'videos'),{
-      title,description:document.getElementById('upload-desc').value,
-      category:document.getElementById('upload-category').value,
-      tags:document.getElementById('upload-tags').value.split(',').map(t=>t.trim()),
-      embedUrl:document.getElementById('upload-url').value,
-      thumbnail:document.getElementById('upload-thumb').value||`https://picsum.photos/seed/${Date.now()}/480/270`,
-      channel:currentUser.displayName||'My Channel',channelId:currentUser.uid,
-      views:0,likes:0,duration:'0:00',subscribers:userProfile.subscribers||0,
-      uploadedAt:new Date().toISOString()
+    // Step 1: Upload Video
+    statusText.textContent = '📤 ভিডিও আপলোড হচ্ছে...';
+    subStatus.textContent = 'এটা কিছুটা সময় নিতে পারে...';
+    const uid = currentUser.uid;
+    const ts = Date.now();
+    const videoPath = `videos/${uid}/${ts}_${selectedVideoFile.name}`;
+    const videoUrl = await uploadFileToStorage(selectedVideoFile, videoPath, (pct) => {
+      fill.style.width = (pct * 0.7) + '%';
+      percentEl.textContent = Math.round(pct * 0.7) + '%';
     });
-    clearInterval(iv);fill.style.width='100%';
-    setTimeout(()=>{wrap.style.display='none';fill.style.width='0';},500);
-    showToast('✅ Video published!');
-    ['upload-title','upload-desc','upload-url','upload-thumb'].forEach(id=>document.getElementById(id).value='');
-    document.getElementById('thumb-preview').style.display='none';
-    document.getElementById('upload-preview').style.display='none';
-    await loadAllVideos();
-  } catch(e){clearInterval(iv);showToast('❌ Error: '+e.message);}
+
+    // Step 2: Upload Thumbnail
+    let thumbUrl = `https://picsum.photos/seed/${ts}/480/270`;
+    if(selectedThumbFile) {
+      statusText.textContent = '🖼️ Thumbnail আপলোড হচ্ছে...';
+      const thumbPath = `thumbnails/${uid}/${ts}_${selectedThumbFile.name}`;
+      thumbUrl = await uploadFileToStorage(selectedThumbFile, thumbPath, (pct) => {
+        fill.style.width = (70 + pct * 0.2) + '%';
+        percentEl.textContent = Math.round(70 + pct * 0.2) + '%';
+      });
+    }
+
+    // Step 3: Save to Firestore
+    statusText.textContent = '💾 তথ্য সংরক্ষণ হচ্ছে...';
+    subStatus.textContent = 'প্রায় হয়ে গেছে...';
+    fill.style.width = '95%';
+    percentEl.textContent = '95%';
+    const vid = document.getElementById('preview-video');
+    await addDoc(collection(db,'videos'), {
+      title,
+      description: document.getElementById('upload-desc').value,
+      category: document.getElementById('upload-category').value,
+      tags: document.getElementById('upload-tags').value.split(',').map(t=>t.trim()).filter(Boolean),
+      videoUrl,
+      thumbnail: thumbUrl,
+      channel: userProfile.name || currentUser.displayName || 'My Channel',
+      channelId: currentUser.uid,
+      views: 0, likes: 0,
+      duration: vid._duration || '0:00',
+      subscribers: userProfile.subscribers || 0,
+      uploadedAt: new Date().toISOString()
+    });
+
+    fill.style.width = '100%';
+    percentEl.textContent = '100%';
+    statusText.textContent = '✅ Published!';
+    subStatus.textContent = 'ভিডিও সফলভাবে আপলোড হয়েছে!';
+    showToast('✅ ভিডিও Publish হয়েছে!');
+
+    // Reset form
+    setTimeout(() => {
+      statusBox.style.display = 'none';
+      fill.style.width = '0';
+      publishBtn.disabled = false;
+      publishBtn.style.opacity = '1';
+      selectedVideoFile = null;
+      selectedThumbFile = null;
+      ['upload-title','upload-desc','upload-tags'].forEach(id => document.getElementById(id).value = '');
+      document.getElementById('upload-preview').style.display = 'none';
+      document.getElementById('thumb-pick-content').innerHTML = '<div style="font-size:1.8rem;margin-bottom:6px;">🖼️</div><div style="font-size:0.85rem;color:var(--text-muted);">Thumbnail বেছে নিন</div>';
+      document.getElementById('upload-area').innerHTML = '<div class="upload-icon">🎬</div><div style="font-size:1rem;font-weight:600;margin-bottom:6px;">গ্যালারি থেকে ভিডিও বেছে নিন</div><div style="font-size:0.85rem;color:var(--text-muted);">MP4, MOV, WebM · ট্যাপ করুন</div><input type="file" id="file-input" accept="video/*" style="display:none" onchange="handleFileSelect(this)">';
+    }, 2000);
+
+    // Reload videos
+    const snap = await getDocs(collection(db,'videos'));
+    allVideos = [...DEMO_VIDEOS, ...snap.docs.map(d=>({id:d.id,...d.data()}))];
+
+  } catch(e) {
+    statusText.textContent = '❌ Error!';
+    subStatus.textContent = e.message;
+    percentEl.textContent = '';
+    publishBtn.disabled = false;
+    publishBtn.style.opacity = '1';
+    showToast('❌ ' + e.message);
+  }
 };
 window.saveDraft = () => {localStorage.setItem('yt_draft',JSON.stringify({title:document.getElementById('upload-title').value,description:document.getElementById('upload-desc').value,url:document.getElementById('upload-url').value}));showToast('📝 Draft saved!');};
 
